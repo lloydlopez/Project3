@@ -47,6 +47,10 @@ typedef struct
     tcp_seq initial_sequence_num;
 
 	tcp_seq sender_next_seq;
+	tcp_seq receiver_next_seq;
+
+	size_t sender_window_size;
+	size_t receiver_window_size;
 
     /* any other connection-wide global variables go here */
 } context_t;
@@ -55,6 +59,11 @@ typedef struct
 static void generate_initial_seq_num(context_t *ctx);
 static void control_loop(mysocket_t sd, context_t *ctx);
 
+void handshake_err_handling(mysocket_t sd)
+{
+	errno = ECONNREFUSED;
+	stcp_unblock_application(sd);
+}
 
 /* initialise the transport layer, and start the main loop, handling
  * any data from the peer or the application.  this function should not
@@ -69,6 +78,9 @@ void transport_init(mysocket_t sd, bool_t is_active)
 
     generate_initial_seq_num(ctx);
 
+	ctx->sender_next_seq = ctx->initial_sequence_num;
+	ctx->receiver_window_size = WINDOW_SIZE;
+
     /* XXX: you should send a SYN packet here if is_active, or wait for one
      * to arrive if !is_active.  after the handshake completes, unblock the
      * application with stcp_unblock_application(sd).  you may also use
@@ -76,25 +88,48 @@ void transport_init(mysocket_t sd, bool_t is_active)
      * if connection fails; to do so, just set errno appropriately (e.g. to
      * ECONNREFUSED, etc.) before calling the function.
      */
+
+	STCPHeader *syn_packet; /* See STCPHeader in transport.h */
+	syn_packet = (STCPHeader *)calloc(1, sizeof(STCPHeader));
+
 	if (is_active)
-	{
-		STCPHeader *syn_packet; /* See STCPHeader in transport.h*/
-		syn_packet = (STCPHeader *)calloc(1, sizeof(STCPHeader));
+	{	
 		syn_packet->th_seq = htonl(ctx->sender_next_seq);
 		syn_packet->th_flags = TH_SYN;
-		syn_packet->th_win = WINDOW_SIZE;
+		syn_packet->th_win = htons(ctx->receiver_window_size);
 
 		if (stcp_network_send(sd, syn_packet, sizeof(TCPHeader), NULL) == -1)
 		{
-			errno = ECONNREFUSED;
-			stcp_unblock_application(sd);
+			handshake_err_handling(sd);
+			return;
 		}
+
 		ctx->connection_state = CSTATE_SYN_SENT;
 
-		/* Next step is to to call stcp_network_recv() and wait for the synack */
+
+		/* Next step is to to call stcp_network_recv() and wait for the SYNACK */
+
+		/* Afterward, send ACK back to server */
+		
+
 	}
-	else
+	else /* Passive end of the connection */
 	{
+		ctx->connection_state = CSTATE_LISTEN;
+
+		if (stcp_network_recv(sd, syn_packet, sizeof(TCPHeader), NULL) < sizeOf(STCPHeader))
+		{
+			handshake_err_handling(sd);
+			return;
+		}
+
+		ctx->receiver_next_seq = ntohl(syn_packet->th_seq) + 1;
+		ctx->sender_window_size = MIN(ntohs(syn_packet->th_win), WINDOW_SIZE);
+
+		/* Next step is to check that SYN flag is set in received header (syn_packet) */
+
+		/* If so, set SYN and ACK flags and send message back to client */
+
 
 	}
 
@@ -161,7 +196,7 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 		{
 			/* the application is requesting that the connection be closed */
 			/* see stcp_network_send() */
-			/* dependant on ctx->state (conditional logic needed to handle  connectionparticular states) */
+			/* dependant on ctx->state (conditional logic needed to handle particular connection states) */
 		}
     }
 }
