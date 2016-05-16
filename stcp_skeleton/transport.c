@@ -20,8 +20,22 @@
 #include "stcp_api.h"
 #include "transport.h"
 
+#define WINDOW_SIZE 3072
 
-enum { CSTATE_ESTABLISHED };    /* you should have more states */
+enum 
+{ 
+	CSTATE_LISTEN,
+	CSTATE_SYN_SENT,
+	CSTATE_SYN_RECEIVED,
+	CSTATE_ESTABLISHED,
+	CSTATE_FIN_WAIT_1,
+	CSTATE_FIN_WAIT_2,
+	CSTATE_CLOSE_WAIT,
+	CSTATE_CLOSING,
+	CSTATE_LAST_ACK,
+	CSTATE_TIME_WAIT,
+	CSTATE_CLOSED
+};
 
 
 /* this structure is global to a mysocket descriptor */
