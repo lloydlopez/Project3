@@ -86,8 +86,8 @@ void transport_init(mysocket_t sd, bool_t is_active)
 
 		if (stcp_network_send(sd, syn_packet, sizeof(TCPHeader), NULL) == -1)
 		{
-			perror("stcp_network_send in transport_init");
-			exit(1);
+			errno = ECONNREFUSED;
+			stcp_unblock_application(sd);
 		}
 		ctx->connection_state = CSTATE_SYN_SENT;
 
