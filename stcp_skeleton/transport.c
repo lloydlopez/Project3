@@ -46,6 +46,8 @@ typedef struct
     int connection_state;   /* state of the connection (established, etc.) */
     tcp_seq initial_sequence_num;
 
+	tcp_seq sender_next_seq;
+
     /* any other connection-wide global variables go here */
 } context_t;
 
@@ -74,6 +76,28 @@ void transport_init(mysocket_t sd, bool_t is_active)
      * if connection fails; to do so, just set errno appropriately (e.g. to
      * ECONNREFUSED, etc.) before calling the function.
      */
+	if (is_active)
+	{
+		STCPHeader *syn_packet; /* See STCPHeader in transport.h*/
+		syn_packet = (STCPHeader *)calloc(1, sizeof(STCPHeader));
+		syn_packet->th_seq = htonl(ctx->sender_next_seq);
+		syn_packet->th_flags = TH_SYN;
+		syn_packet->th_win = WINDOW_SIZE;
+
+		if (stcp_network_send(sd, syn_packet, sizeof(TCPHeader), NULL) == -1)
+		{
+			perror("stcp_network_send in transport_init");
+			exit(1);
+		}
+		ctx->connection_state = CSTATE_SYN_SENT;
+
+		/* Next step is to to call stcp_network_recv() and wait for the synack */
+	}
+	else
+	{
+
+	}
+
     ctx->connection_state = CSTATE_ESTABLISHED;
     stcp_unblock_application(sd);
 
@@ -117,7 +141,7 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 
         /* see stcp_api.h or stcp_api.c for details of this function */
         /* XXX: you will need to change some of these arguments! */
-        event = stcp_wait_for_event(sd, 0, NULL);
+        event = stcp_wait_for_event(sd, ANY_EVENT, NULL);
 
         /* check whether it was the network, app, or a close request */
         if (event & APP_DATA)
