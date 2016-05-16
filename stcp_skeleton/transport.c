@@ -109,10 +109,22 @@ static void control_loop(mysocket_t sd, context_t *ctx)
         if (event & APP_DATA)
         {
             /* the application has requested that data be sent */
-            /* see stcp_app_recv() */
+            /* see stcp_app_recv(), stcp_network_send */		
         }
 
-        /* etc. */
+		else if (event & NETWORK_DATA)
+		{
+			/* the application is receiving data from the network */
+			/* see stcp_app_send(), stcp_network_send */
+			/* dependant on ctx->state (conditional logic needed to handle particular connection states) */
+		}
+        
+		else if (event & APP_CLOSE_REQUESTED)
+		{
+			/* the application is requesting that the connection be closed */
+			/* see stcp_network_send() */
+			/* dependant on ctx->state (conditional logic needed to handle  connectionparticular states) */
+		}
     }
 }
 
