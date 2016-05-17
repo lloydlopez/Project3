@@ -58,6 +58,8 @@ typedef struct
 
 static void generate_initial_seq_num(context_t *ctx);
 static void control_loop(mysocket_t sd, context_t *ctx);
+void close_connection_recv(mysocket_t sd, context_t *ctx, STCPHeader *fin_packet);
+void close_connection_send(mysocket_t sd, context_t *ctx, STCPHeader *fin_packet)
 
 void handshake_err_handling(mysocket_t sd)
 {
@@ -258,5 +260,85 @@ void our_dprintf(const char *format,...)
     fflush(stdout);
 }
 
+void close_connection_recv(mysocket_t sd, context_t *ctx, STCPHeader *fin_packet)
+{
+	if (stcp_network_recv(sd, fin_packet, sizeof(STCPHeader)) < sizeOf(STCPHeader))
+	{
+		handshake_err_handling(sd);
+		return;
+	}
+	//Handle receiving a FIN with data in the message
+	ctx->connection_state = CSTATE_CLOSE_WAIT;
+	
+	fin_packet->th_flags = TH_ACK;
+	ctx->receiver_next_seq = ntohs(fin_packet->th_seq) + 1;
+	ctx->sender_next_seq = ntohs(fin_packet->th_ack);
+	fin_packet->th_seq = htons(ctx->sender_next_seq);
+	fin_packet->th_ack = htons(ctx->receiver_next_seq);
+	
+	if (stcp_network_send(sd, fin_packet, sizeof(STCPHeader), NULL) == -1)
+	{
+		handshake_err_handling(sd); //Change this?
+		return;
+	}
+	
+	ctx->connection_state = CSTATE_LAST_ACK; //After ACK?
+	fin_packet->th_flags = TH_FIN + TH_ACK;
+	if (stcp_network_send(sd, fin_packet, sizeof(STCPHeader), NULL) == -1)
+	{
+		handshake_err_handling(sd); //Change this?
+		return;
+	}
+	
+	if (stcp_network_recv(sd, fin_packet, sizeof(STCPHeader)) < sizeOf(STCPHeader))
+	{
+		handshake_err_handling(sd);
+		return;
+	}
+	ctx->connection_state = CSTATE_CLOSED;
+}
+
+void close_connection_send(mysocket_t sd, context_t *ctx, STCPHeader *fin_packet)
+{
+	//Assumption is we are not sending FIN with data included
+	
+	fin_packet->th_flags = TH_FIN + TH_ACK;
+	if (stcp_network_send(sd, fin_packet, sizeof(STCPHeader), NULL) == -1)
+	{
+		handshake_err_handling(sd); //Change this?
+		return;
+	}
+	
+	ctx->connection_state = CSTATE_FIN_WAIT_1;
+	
+	if (stcp_network_recv(sd, fin_packet, sizeof(STCPHeader)) < sizeOf(STCPHeader))
+	{
+		handshake_err_handling(sd);
+		return;
+	}
+	
+	ctx->connection_state = CSTATE_FIN_WAIT_2;
+	
+	if (stcp_network_recv(sd, fin_packet, sizeof(STCPHeader)) < sizeOf(STCPHeader))
+	{
+		handshake_err_handling(sd);
+		return;
+	}
+	//Unsure what CSTATE to appy here, as CSTATE_TIME_WAIT isn't supposed to be used
+	
+	syn_packet->th_flags = TH_ACK;
+	ctx->receiver_next_seq = ntohs(fin_packet->th_seq) + 1;
+	ctx->sender_next_seq = ntohs(fin_packet->th_ack);
+	fin_packet->th_seq = htons(ctx->sender_next_seq);
+	fin_packet->th_ack = htons(ctx->receiver_next_seq);
+	
+	if (stcp_network_send(sd, fin_packet, sizeof(STCPHeader), NULL) == -1)
+	{
+		handshake_err_handling(sd); //Change this?
+		return;
+	}
+	
+	ctx->connection_state=CSTATE_CLOSED;
+}
 
 
