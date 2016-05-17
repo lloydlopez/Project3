@@ -49,8 +49,8 @@ typedef struct
 	tcp_seq sender_next_seq;
 	tcp_seq receiver_next_seq;
 
-	size_t sender_window_size;
-	size_t receiver_window_size;
+	uint16_t sender_window_size;
+	uint16_t receiver_window_size;
 
     /* any other connection-wide global variables go here */
 } context_t;
@@ -91,14 +91,15 @@ void transport_init(mysocket_t sd, bool_t is_active)
 
 	STCPHeader *syn_packet; /* See STCPHeader in transport.h */
 	syn_packet = (STCPHeader *)calloc(1, sizeof(STCPHeader));
+	assert(syn_packet);
 
 	if (is_active)
 	{	
-		syn_packet->th_seq = htonl(ctx->sender_next_seq);
+		syn_packet->th_seq = htons(ctx->sender_next_seq);
 		syn_packet->th_flags = TH_SYN;
 		syn_packet->th_win = htons(ctx->receiver_window_size);
 
-		if (stcp_network_send(sd, syn_packet, sizeof(TCPHeader), NULL) == -1)
+		if (stcp_network_send(sd, syn_packet, sizeof(STCPHeader), NULL) == -1)
 		{
 			handshake_err_handling(sd);
 			return;
@@ -106,31 +107,59 @@ void transport_init(mysocket_t sd, bool_t is_active)
 
 		ctx->connection_state = CSTATE_SYN_SENT;
 
-
-		/* Next step is to to call stcp_network_recv() and wait for the SYNACK */
-
-		/* Afterward, send ACK back to server */
+		if(stcp_network_recv(sd, syn_packet, sizeof(STSCPHeader)) < sizeOf(STCPHeader)){
+			handshake_err_handling(sd);
+			return;
+		}
 		
-
+		syn_packet->th_flags = TH_ACK;
+		ctx->receiver_next_seq = ntohs(syn_packet->th_seq) + 1;
+		ctx->sender_next_seq = ntohs(syn_packet->th_ack);
+		syn_packet->th_seq = htons(ctx->sender_next_seq);
+		syn_packet->th_ack = htons(ctx->receiver_next_seq);
+		
+		if (stcp_network_send(sd, syn_packet, sizeof(STCPHeader), NULL) == -1)
+		{
+			handshake_err_handling(sd);
+			return;
+		}
 	}
 	else /* Passive end of the connection */
 	{
 		ctx->connection_state = CSTATE_LISTEN;
 
-		if (stcp_network_recv(sd, syn_packet, sizeof(TCPHeader), NULL) < sizeOf(STCPHeader))
+		if (stcp_network_recv(sd, syn_packet, sizeof(STCPHeader)) < sizeOf(STCPHeader))
 		{
 			handshake_err_handling(sd);
 			return;
 		}
+		ctx->connection_state = CSTATE_SYN_RECEIVED;
 
-		ctx->receiver_next_seq = ntohl(syn_packet->th_seq) + 1;
+		ctx->receiver_next_seq = ntohs(syn_packet->th_seq) + 1;
 		ctx->sender_window_size = MIN(ntohs(syn_packet->th_win), WINDOW_SIZE);
 
 		/* Next step is to check that SYN flag is set in received header (syn_packet) */
-
 		/* If so, set SYN and ACK flags and send message back to client */
-
-
+		if(syn_packet->th_flags == TH_SYN){
+			syn_packet->th_flags = TH_SYN + TH_ACK;
+			syn_packet->th_seq = htons(ctx->sender_next_seq);
+			syn_packet->th_ack = htons(ctx->receiver_next_seq);
+			if (stcp_network_send(sd, syn_packet, sizeof(STCPHeader), NULL) == -1)
+			{
+				handshake_err_handling(sd);
+				return;
+			}
+			
+			if (stcp_network_recv(sd, syn_packet, sizeof(STCPHeader)) < sizeOf(STCPHeader))
+			{
+				handshake_err_handling(sd);
+				return;
+			}
+		}else{
+			printf("byte order issue");  //Remove before submitting
+			handshake_err_handling(sd);
+			return;
+		}
 	}
 
     ctx->connection_state = CSTATE_ESTABLISHED;
@@ -140,6 +169,7 @@ void transport_init(mysocket_t sd, bool_t is_active)
 
     /* do any cleanup here */
     free(ctx);
+	free(syn_packet);
 }
 
 
