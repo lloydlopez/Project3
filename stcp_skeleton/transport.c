@@ -45,7 +45,8 @@ typedef struct
 
     int connection_state;   /* state of the connection (established, etc.) */
     tcp_seq initial_sequence_num;
-
+    tcp_seq receiver_initial_sequence_num;
+    
 	tcp_seq sender_next_seq;
 	tcp_seq receiver_next_seq;
 
@@ -105,6 +106,7 @@ void transport_init(mysocket_t sd, bool_t is_active)
 		}
 
 		ctx->connection_state = CSTATE_SYN_SENT;
+        
 
 
 		/* Next step is to to call stcp_network_recv() and wait for the SYNACK */
@@ -116,7 +118,48 @@ void transport_init(mysocket_t sd, bool_t is_active)
 	else /* Passive end of the connection */
 	{
 		ctx->connection_state = CSTATE_LISTEN;
+        
+        while(ctx->connection_state!=CSTATE_ESTABLISHED)
+            {
+                    switch(ctx->connection_state)
+                    {
+                        case CSTATE_LISTEN : break;
+                        
+                        case CSTATE_SYN_SENT : 
+                        
+                            syn_header = (STCPHeader *) malloc(HEADER_SIZE);
+                            assert(syn_header);
+                            memset(syn_header, 0, HEADER_SIZE);
 
+                            /* construct the syn header */
+                            syn_header->th_seq   = ctx->initial_sequence_num;
+                            syn_header->th_flags = TH_SYN;
+                            syn_header->th_win   = htons(ctx->receiver_window_size);
+                            
+                            /* send SYN */
+                            if (stcp_network_send(sd, syn_header, HEADER_SIZE, NULL) == -1)
+                                errno = ECONNREFUSED;
+                                
+                            /* change the connection state */
+                            ctx->connection_state = CSTATE_SYN_RECEIVED;
+
+                            break;
+                            
+                        case CSTATE_SYN_RECEIVED : break;
+                        case CSTATE_ESTABLISHED : break;
+                        
+                        case CSTATE_FIN_WAIT_1 : 
+                            
+                            stcp_fin_recieved(sd);
+                            break;
+                            
+                        case CSTATE_FIN_WAIT_2 :
+                        case CSTATE_CLOSE_WAIT : 
+                        case CSTATE_CLOSING : 
+                        case CSTATE_LAST_ACK :
+                        case CSTATE_TIME_WAIT : 
+                    } 
+                    }
 		if (stcp_network_recv(sd, syn_packet, sizeof(TCPHeader), NULL) < sizeOf(STCPHeader))
 		{
 			handshake_err_handling(sd);
@@ -172,11 +215,14 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 
     while (!ctx->done)
     {
+        
+        tcphdr *hdr;
+        hdr = (tcphdr *) calloc(1, sizeof(tcphdr));
         unsigned int event;
 
         /* see stcp_api.h or stcp_api.c for details of this function */
         /* XXX: you will need to change some of these arguments! */
-        event = stcp_wait_for_event(sd, ANY_EVENT, NULL);
+        event = stcp_wait_for_event(sd, APP_DATA | NETWORK_DATA, NULL);
 
         /* check whether it was the network, app, or a close request */
         if (event & APP_DATA)
@@ -186,7 +232,46 @@ static void control_loop(mysocket_t sd, context_t *ctx)
         }
 
 		else if (event & NETWORK_DATA)
-		{
+		{   
+            char buf[PACKET_SIZE] = {0};
+            size_t rcvd = stcp_network_recv(sd, buf, PACKET_SIZE)-HEADER_SIZE;
+            memcpy(hdr, buf, HEADER_SIZE);
+            hdr = convert_to_host(hdr);
+            char data[PACKET_SIZE - HEADER_SIZE] = {0};
+
+            memcpy(data, &(buf[HEADER_SIZE]), rcvd);
+            bool_t flag = false;
+            switch(connection_state){
+              case CSTATE_FIN_WAIT1:
+                if(hdr->th_ack-hdr->th_seq == 1){
+                  printf("%d %d CSTATE_FIN_WAIT1\n",hdr->th_seq,hdr->th_ack );
+                  connection_state = CSTATE_FIN_WAIT2;
+                }
+                else
+                  continue;
+                break;
+              case CSTATE_FIN_WAIT2:
+                if(hdr->th_flags == TH_FIN){
+                  stcp_fin_received(sd);
+                  flag = true;
+                  hdr->th_ack = hdr->th_seq + 1;
+                  printf("SEND: %d %d CSTATE_FIN_WAIT2\n",hdr->th_seq, hdr->th_ack );
+                  stcp_network_send(sd, (void *)convert_to_network(hdr), sizeof(struct tcphdr), NULL);
+                  connection_state = TIMEWAIT;
+                }
+                else
+                  continue;
+                break;
+
+              case CSTATE_LAST_ACK:
+                if(hdr->th_flags == TH_FIN){
+                  stcp_fin_received(sd);
+                  flag = true;
+                }
+                else
+                  continue;
+                break;
+            }      
 			/* the application is receiving data from the network */
 			/* see stcp_app_send(), stcp_network_send */
 			/* dependant on ctx->state (conditional logic needed to handle particular connection states) */
@@ -194,9 +279,17 @@ static void control_loop(mysocket_t sd, context_t *ctx)
         
 		else if (event & APP_CLOSE_REQUESTED)
 		{
+            if(ctx->connection_state == CSTATE_ESTABLISHED)
+            {
+                
+            }
 			/* the application is requesting that the connection be closed */
 			/* see stcp_network_send() */
+<<<<<<< Updated upstream
 			/* dependant on ctx->state (conditional logic needed to handle particular connection states) */
+=======
+			/* dependant on ctx->state (conditional logic needed to handle connection particular states) */
+>>>>>>> Stashed changes
 		}
     }
 }
