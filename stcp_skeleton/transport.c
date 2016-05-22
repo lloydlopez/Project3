@@ -235,13 +235,12 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 				char packet[STCP_MSS] = { 0 };
 				size_t packet_size = stcp_app_recv(sd, packet, STCP_MSS);
 
+				ctx->sender_next_seq++;
 				header->th_seq = ctx->sender_next_seq;
 				header->th_win = WINDOW_SIZE;
 				
 				// Currently sending a new header plus the entire packet
-				stcp_network_send(sd, header_packet, HEADER_SIZE, packet, packet_size, NULL) - HEADER SIZE;
-
-				ctx->sender_next_seq++;
+				stcp_network_send(sd, header_packet, HEADER_SIZE, packet, packet_size, NULL);
 
 				clear_header(header);
 			}
@@ -295,7 +294,7 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 					ctx->connection_state = CSTATE_CLOSED;
 					ctx->done = true;
 				}
-				else{
+				else if(ctx->connection != CSTATE_ESTABLISHED){
 					perror("NETWORK_DATA: ACK received in invalid state\n");
 				}
 					
@@ -332,7 +331,7 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 			{
 				perror("APP_CLOSE_REQUESTED: invalid state\n");
 			}
-			header_packet = (STCPHeader *)calloc(1, sizeof(STCPHeader));
+
 			header_packet->th_seq = htons(ctx->sender_next_seq);
 			header_packet->th_ack = htons(ctx->receiver_next_seq);
 			header_packet->th_flags = TH_FIN;
@@ -340,6 +339,9 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 
 			stcp_network_send(sd, header_packet, sizeof(STCPHeader), NULL);
 		}
+		free(header);
+		free(header_packet);
+		free(header_data_packet);
 	}
 }
 
