@@ -234,7 +234,7 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 				char packet[STCP_MSS] = { 0 };
 				size_t packet_size = stcp_app_recv(sd, packet, STCP_MSS);
 
-				header->th_seq++;
+				header->th_seq =;
 				header->th_win = WINDOW_SIZE;
 				
 				// Currently sending a new header plus the entire packet
@@ -252,8 +252,8 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 			uint16_t *header_data_packet = (uint16_t *)calloc(1, STCP_MSS);
 			uint16_t packet_length = stcp_network_recv(sd, header_data_packet, STCP_MSS);
 			
-			uint16_t *data = ntohs(header_data_packet + sizeOf(STCPHeader));
-			header_packet = header_data_packet;
+			char *data = (char*)ntohs(header_data_packet + sizeOf(STCPHeader));
+			header_packet = (STCPHeader*)header_data_packet;
 			
 			if(header_packet->th_flags == TH_FIN){				
 
@@ -273,14 +273,14 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 					perror("NETWORK_DATA: FIN received in invalid state\n");
 				}
 				
+				ctx->sender_next_seq = ntohs(header_packet->th_ack);
+				ctx->receiver_next_seq = ntohs(header_packet->th_seq) + 1;
+				ctx->sender_unack_seq = ntohs(header_packer->th_ack);
+				
 				header_packet->th_seq = htons(ctx->sender_next_seq);
 				header_packet->th_ack = htons(ctx->receiver_next_seq);
 				header_packet->th_flags = TH_ACK;
 				header_packet->th_win = htons(ctx->receiver_window_size);
-				
-				ctx->sender_next_seq = ntohs(header_packet->th_ack);
-				ctx->receiver_next_seq = ntohs(header_packet->th_seq) + 1;
-				ctx->sender_unack_seq = ntohs(header_packer->th_ack);
 
 				stcp_network_send(sd, header_packet, sizeof(STCPHeader), NULL);
 				stcp_fin_received(sd);
@@ -293,34 +293,31 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 				else if(ctx->connection_state == CSTATE_LAST_ACK)
 				{
 					ctx->connection_state = CSTATE_CLOSED;
-<<<<<<< HEAD
-						
-				ctx->sender_next_seq = header_packet->th_ack;
-				ctx->receiver_next_seq = header_packet->th_seq + 1;
-				ctx->sender_unack_seq = ctx-> sender_next_seq;
-				
-				stcp_network_send(sd, header_packet, sizeof(STCPHeader));
-=======
 					ctx->done = true;
+				}
+				else{
+					perror("NETWORK_DATA: ACK received in invalid state\n");
 				}
 					
 					
 				ctx->sender_next_seq = ntohs(header_packet->th_ack);
 				ctx->receiver_next_seq = ntohs(header_packet->th_seq);
 				ctx->sender_unack_seq = ntohs(header_packer->th_ack);
-				
-			}else{
-				//Handle Payload
-				
-			}
-			
-		
-			
->>>>>>> refs/remotes/origin/master
+
 			
 			} else {
-				// Handle Payload
+				ctx->sender_next_seq = ntohs(header_packet->th_ack);
+				ctx->receiver_next_seq = ntohs(header_packet->th_seq) + 1;
+				ctx->sender_unack_seq = ntohs(header_packer->th_ack);
 				
+				stcp_app_send(sd, data, packet_length - sizeof(STCPHeader));
+				
+				header_packet->th_seq = htons(ctx->sender_next_seq);
+				header_packet->th_ack = htons(ctx->receiver_next_seq);
+				header_packet->th_flags = TH_ACK;
+				header_packet->th_win = htons(ctx->receiver_window_size);
+
+				stcp_network_send(sd, header_packet, sizeof(STCPHeader), NULL);
 			}			
 		}
 
@@ -339,7 +336,7 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 			header_packet = (STCPHeader *)calloc(1, sizeof(STCPHeader));
 			header_packet->th_seq = htons(ctx->sender_next_seq);
 			header_packet->th_ack = htons(ctx->receiver_next_seq);
-			header_packet->th_flags = TH_ACK;
+			header_packet->th_flags = TH_FIN;
 			header_packet->th_win = htons(ctx->receiver_window_size);
 
 			stcp_network_send(sd, header_packet, sizeof(STCPHeader), NULL);
