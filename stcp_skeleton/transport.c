@@ -113,7 +113,7 @@ void transport_init(mysocket_t sd, bool_t is_active)
 
 		ctx->connection_state = CSTATE_SYN_SENT;
 
-		if (stcp_network_recv(sd, header_packet, sizeof(STCPHeader)) < sizeOf(STCPHeader)) {
+		if (stcp_network_recv(sd, header_packet, sizeof(STCPHeader)) < sizeof(STCPHeader)) {
 			handshake_err_handling(sd);
 			return;
 		}
@@ -141,7 +141,7 @@ void transport_init(mysocket_t sd, bool_t is_active)
 	{
 		ctx->connection_state = CSTATE_LISTEN;
 
-		if (stcp_network_recv(sd, header_packet, sizeof(STCPHeader)) < sizeOf(STCPHeader))
+		if (stcp_network_recv(sd, header_packet, sizeof(STCPHeader)) < sizeof(STCPHeader))
 		{
 			handshake_err_handling(sd);
 			return;
@@ -164,7 +164,7 @@ void transport_init(mysocket_t sd, bool_t is_active)
 				return;
 			}
 
-			if (stcp_network_recv(sd, header_packet, sizeof(STCPHeader)) < sizeOf(STCPHeader))
+			if (stcp_network_recv(sd, header_packet, sizeof(STCPHeader)) < sizeof(STCPHeader))
 			{
 				handshake_err_handling(sd);
 				return;
@@ -197,7 +197,7 @@ static void generate_initial_seq_num(context_t *ctx)
 	/* please don't change this! */
 	ctx->initial_sequence_num = 1;
 #else
-	srand((unsigned int *)&ctx);
+	srand(*(unsigned int *)&ctx);
 	ctx->initial_sequence_num = rand() % (MAX_SEQ_NUM+1);
 #endif
 }
@@ -215,8 +215,15 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 	assert(ctx);
 	assert(!ctx->done);
 
-	STCPHeader *header;
+	STCPHeader *header, *header_packet;
+	
 	header = (STCPHeader *)calloc(1, sizeof(STCPHeader));
+	uint16_t *header_data_packet = (uint16_t *)calloc(1, STCP_MSS);
+	header_packet = (STCPHeader*)header_data_packet;
+	header_packet->th_off = 5;
+	char *data = (char*)(header_data_packet + TCP_DATA_START(header_data_packet));
+	
+	uint16_t packet_length = stcp_network_recv(sd, header_data_packet, STCP_MSS);
 
 	while (!ctx->done)
 	{
@@ -248,11 +255,6 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 
 		else if (event & NETWORK_DATA)
 		{
-			uint16_t *header_data_packet = (uint16_t *)calloc(1, STCP_MSS);
-			uint16_t packet_length = stcp_network_recv(sd, header_data_packet, STCP_MSS);
-			
-			char *data = (char*)ntohs(header_data_packet + sizeOf(STCPHeader));
-			header_packet = (STCPHeader*)header_data_packet;
 			
 			if(header_packet->th_flags == TH_FIN){				
 
@@ -274,7 +276,7 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 				
 				ctx->sender_next_seq = ntohs(header_packet->th_ack);
 				ctx->receiver_next_seq = ntohs(header_packet->th_seq) + 1;
-				ctx->sender_unack_seq = ntohs(header_packer->th_ack);
+				ctx->sender_unack_seq = ntohs(header_packet->th_ack);
 				
 				header_packet->th_seq = htons(ctx->sender_next_seq);
 				header_packet->th_ack = htons(ctx->receiver_next_seq);
@@ -294,19 +296,19 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 					ctx->connection_state = CSTATE_CLOSED;
 					ctx->done = true;
 				}
-				else if(ctx->connection != CSTATE_ESTABLISHED){
+				else if(ctx->connection_state != CSTATE_ESTABLISHED){
 					perror("NETWORK_DATA: ACK received in invalid state\n");
 				}
 					
 				ctx->sender_next_seq = ntohs(header_packet->th_ack);
 				ctx->receiver_next_seq = ntohs(header_packet->th_seq);
-				ctx->sender_unack_seq = ntohs(header_packer->th_ack);
+				ctx->sender_unack_seq = ntohs(header_packet->th_ack);
 			
 			} else {
 
 				ctx->sender_next_seq = ntohs(header_packet->th_ack);
 				ctx->receiver_next_seq = ntohs(header_packet->th_seq) + 1;
-				ctx->sender_unack_seq = ntohs(header_packer->th_ack);
+				ctx->sender_unack_seq = ntohs(header_packet->th_ack);
 				
 				stcp_app_send(sd, data, packet_length - sizeof(STCPHeader));
 				
