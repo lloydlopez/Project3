@@ -146,6 +146,7 @@ void transport_init(mysocket_t sd, bool_t is_active)
 			handshake_err_handling(sd);
 			return;
 		}
+
 		ctx->connection_state = CSTATE_SYN_RECEIVED;
 
 		ctx->receiver_next_seq = ntohs(header_packet->th_seq) + 1;
@@ -234,13 +235,13 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 				char packet[STCP_MSS] = { 0 };
 				size_t packet_size = stcp_app_recv(sd, packet, STCP_MSS);
 
-				header->th_seq++;
+				header->th_seq = ctx->sender_next_seq;
 				header->th_win = WINDOW_SIZE;
 				
 				// Currently sending a new header plus the entire packet
-				size_t sent = stcp_network_send(sd, header_packet, HEADER_SIZE, packet, packet_size, NULL) - HEADER SIZE;
+				stcp_network_send(sd, header_packet, HEADER_SIZE, packet, packet_size, NULL) - HEADER SIZE;
 
-				ctx->sender_next_seq += sent;
+				ctx->sender_next_seq++;
 
 				clear_header(header);
 			}
@@ -248,7 +249,6 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 
 		else if (event & NETWORK_DATA)
 		{
-			
 			uint16_t *header_data_packet = (uint16_t *)calloc(1, STCP_MSS);
 			uint16_t packet_length = stcp_network_recv(sd, header_data_packet, STCP_MSS);
 			
@@ -293,35 +293,30 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 				else if(ctx->connection_state == CSTATE_LAST_ACK)
 				{
 					ctx->connection_state = CSTATE_CLOSED;
-<<<<<<< HEAD
-						
-				ctx->sender_next_seq = header_packet->th_ack;
-				ctx->receiver_next_seq = header_packet->th_seq + 1;
-				ctx->sender_unack_seq = ctx-> sender_next_seq;
-				
-				stcp_network_send(sd, header_packet, sizeof(STCPHeader));
-=======
 					ctx->done = true;
 				}
-					
 					
 				ctx->sender_next_seq = ntohs(header_packet->th_ack);
 				ctx->receiver_next_seq = ntohs(header_packet->th_seq);
 				ctx->sender_unack_seq = ntohs(header_packer->th_ack);
 				
-			}else{
-				//Handle Payload
-				
-			}
-			
-		
-			
->>>>>>> refs/remotes/origin/master
-			
 			} else {
-				// Handle Payload
-				
-			}			
+
+				char packet[STCP_MSS] = { 0 };
+				size_t packet_size = stcp_app_recv(sd, packet, STCP_MSS);
+
+				char data[STCP_MSS - HEADER_SIZE];
+
+				header->th_seq = ctx->sender_next_seq;
+				header->th_win = WINDOW_SIZE;
+
+				// Currently sending a new header plus the entire packet
+				stcp_app_send(sd, data, (STCP_MSS - HEADER_SIZE), packet, packet_size, NULL) - HEADER SIZE;
+
+				ctx->sender_next_seq++;
+
+				clear_header(header);
+			}		
 		}
 
 		else if (event & APP_CLOSE_REQUESTED)
