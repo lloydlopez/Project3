@@ -276,14 +276,36 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 				header_packet->th_ack = htons(ctx->receiver_next_seq);
 				header_packet->th_flags = TH_ACK;
 				header_packet->th_win = htons(ctx->receiver_window_size);
+				
+				ctx->sender_next_seq = header_packet->th_ack;
+				ctx->receiver_next_seq = header_packet->th_seq + 1;
+				ctx->sender_unack_seq = ctx-> sender_next_seq;
 
 				stcp_network_send(sd, header_packet, sizeof(STCPHeader), NULL);
 				stcp_fin_received(sd);
 
 			}else if(header_packet->th_flags == TH_ACK){
-				//handle data and continue
-				stcp_fin_received(sd);
+				
+				if(ctx->connection_state == CSTATE_FIN_WAIT_1)
+					ctx->connection_state = CSTATE_FIN_WAIT_2;
+				else if(ctx->connection_state == CSTATE_LAST_ACK)
+					ctx->connection_state = CSTATE_CLOSED;
+					
+					
+				ctx->sender_next_seq = header_packet->th_ack;
+				ctx->receiver_next_seq = header_packet->th_seq + 1;
+				ctx->sender_unack_seq = ctx-> sender_next_seq;
+				
+				
+				
+
+				stcp_network_send(sd, header_packet, sizeof(STCPHeader));
+			}else{
+				//Handle Payload
+				
 			}
+			
+		
 			
 			
 		}
