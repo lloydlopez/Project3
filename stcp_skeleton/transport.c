@@ -254,10 +254,7 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 			uint16_t *data = ntohs(header_data_packet + sizeOf(STCPHeader));
 			header_packet = header_data_packet;
 			
-			if(header_packet->th_flags == TH_FIN){
-				//Handle data
-				close_connection_recv(sd, ctx, header_packet);
-				stcp_fin_received(sd);
+			if(header_packet->th_flags == TH_FIN){				
 
 				if (ctx->connection_state == CSTATE_ESTABLISHED)
 					ctx->connection_state = CSTATE_CLOSE_WAIT;
@@ -281,6 +278,7 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 				header_packet->th_win = htons(ctx->receiver_window_size);
 
 				stcp_network_send(sd, header_packet, sizeof(STCPHeader), NULL);
+				stcp_fin_received(sd);
 
 			}else if(header_packet->th_flags == TH_ACK){
 				//handle data and continue
@@ -292,11 +290,23 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 
 		else if (event & APP_CLOSE_REQUESTED)
 		{
-			close_connection_send(sd, ctx, header_packet);
-			ctx->done = true;
-			/* the application is requesting that the connection be closed */
-			/* see stcp_network_send() */
-			/* dependant on ctx->state (conditional logic needed to handle particular connection states) */
+			if (ctx->connection_state == CSTATE_ESTABLISHED)
+				ctx->connection_state = CSTATE_FIN_WAIT_1;
+
+			else if (ctx->connection_state == CSTATE_CLOSE_WAIT)
+				ctx->connection_state = CSTATE_LAST_ACK;
+
+			else
+			{
+				perror("APP_CLOSE_REQUESTED: invalid state\n");
+			}
+			header_packet = (STCPHeader *)calloc(1, sizeof(STCPHeader));
+			header_packet->th_seq = htons(ctx->sender_next_seq);
+			header_packet->th_ack = htons(ctx->receiver_next_seq);
+			header_packet->th_flags = TH_ACK;
+			header_packet->th_win = htons(ctx->receiver_window_size);
+
+			stcp_network_send(sd, header_packet, sizeof(STCPHeader), NULL);
 		}
 	}
 }
