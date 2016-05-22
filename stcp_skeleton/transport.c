@@ -22,6 +22,7 @@
 
 #define WINDOW_SIZE 3072
 #define MAX_SEQ_NUM 255
+#define HEADER_SIZE 20
 
 enum
 {
@@ -60,7 +61,8 @@ typedef struct
 static void generate_initial_seq_num(context_t *ctx);
 static void control_loop(mysocket_t sd, context_t *ctx);
 void close_connection_recv(mysocket_t sd, context_t *ctx, STCPHeader *fin_packet);
-void close_connection_send(mysocket_t sd, context_t *ctx, STCPHeader *fin_packet)
+void close_connection_send(mysocket_t sd, context_t *ctx, STCPHeader *fin_packet);
+void clear_header(tcphdr *header);
 
 void handshake_err_handling(mysocket_t sd)
 {
@@ -212,8 +214,8 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 	assert(ctx);
 	assert(!ctx->done);
 
-	STCPHeader *header_packet;
-	header_packet = (STCPHeader *)calloc(1, sizeof(STCPHeader));
+	STCPHeader *header;
+	header = (STCPHeader *)calloc(1, sizeof(STCPHeader));
 
 	while (!ctx->done)
 	{
@@ -229,7 +231,17 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 			/* Make sure data is sent only if space is available */
 			if (ctx->sender_next_seq < ctx->sender_unack_seq + ctx->receiver_window_size)
 			{
+				char data[STCP_MSS - HEADER_SIZE] = { 0 };
+				size_t data_size = stcp_app_recv(sd, data, PACKET_SIZE - HEADER_SIZE);
 
+				header->th_seq = ctx->sender_next_seq;
+				header->th_win = WINDOW_SIZE;
+				
+				size_t sent = stcp_network_send(sd, header_packet, HEADER_SIZE, data, data_size, NULL) - HEADER SIZE;
+
+				ctx->sender_next_seq += sent;
+
+				clear_header(header);
 			}
 		}
 
@@ -289,6 +301,13 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 	}
 }
 
+void clear_header(tcphdr *header)
+{
+	header->th_flags = 0;
+	header->th_ack = 0;
+	header->th_seq = 0;
+	header->th_win = 0;
+}
 
 /**********************************************************************/
 /* our_dprintf
