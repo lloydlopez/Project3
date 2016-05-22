@@ -235,13 +235,28 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 
 		else if (event & NETWORK_DATA)
 		{
-			uint16_t *header_data_packet = (uint16_t *)calloc(1, sizeof(STCPHeader) + STCP_MSS);
-			uint16_t packet_length = stcp_network_recv(sd, header_data_packet, sizeof(STCPHeader) + STCP_MSS);
+			
+			uint16_t *header_data_packet = (uint16_t *)calloc(1, STCP_MSS);
+			uint16_t packet_length = stcp_network_recv(sd, header_data_packet, STCP_MSS);
+			
+			uint16_t *data = ntohs(header_data_packet + sizeOf(STCPHeader));
+			header_packet = header_data_packet;
+			
+			if(header_packet->TH_FLAGS = TH_FIN + TH_ACK){
+				//Handle data
+				close_connection_recv(sd, ctx, header_packet);
+				ctx->done = true;
+			}else if(header_packet->TH_ACK){
+				//handle data and continue
+			}
+			
 			
 		}
 
 		else if (event & APP_CLOSE_REQUESTED)
 		{
+			close_connection_send(sd, ctx, header_packet);
+			ctx->done = true;
 			/* the application is requesting that the connection be closed */
 			/* see stcp_network_send() */
 			/* dependant on ctx->state (conditional logic needed to handle particular connection states) */
@@ -278,12 +293,6 @@ void our_dprintf(const char *format, ...)
 
 void close_connection_recv(mysocket_t sd, context_t *ctx, STCPHeader *fin_packet)
 {
-	if (stcp_network_recv(sd, fin_packet, sizeof(STCPHeader)) < sizeOf(STCPHeader))
-	{
-		handshake_err_handling(sd);
-		return;
-	}
-	//Handle receiving a FIN with data in the message
 	ctx->connection_state = CSTATE_CLOSE_WAIT;
 
 	fin_packet->th_flags = TH_ACK;
