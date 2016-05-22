@@ -235,13 +235,12 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 				char packet[STCP_MSS] = { 0 };
 				size_t packet_size = stcp_app_recv(sd, packet, STCP_MSS);
 
+				ctx->sender_next_seq++;
 				header->th_seq = ctx->sender_next_seq;
 				header->th_win = WINDOW_SIZE;
-				
-				// Currently sending a new header plus the entire packet
-				stcp_network_send(sd, header_packet, HEADER_SIZE, packet, packet_size, NULL) - HEADER SIZE;
 
-				ctx->sender_next_seq++;
+				// Currently sending a new header plus the entire packet
+				stcp_network_send(sd, header, HEADER_SIZE, packet, packet_size, NULL);
 
 				clear_header(header);
 			}
@@ -376,4 +375,3 @@ void our_dprintf(const char *format, ...)
 	fputs(buffer, stdout);
 	fflush(stdout);
 }
-
