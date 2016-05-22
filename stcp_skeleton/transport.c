@@ -113,7 +113,7 @@ void transport_init(mysocket_t sd, bool_t is_active)
 
 		ctx->connection_state = CSTATE_SYN_SENT;
 
-		if (stcp_network_recv(sd, header_packet, sizeof(STCPHeader)) < sizeof(STCPHeader)) {
+		if ((size_t)stcp_network_recv(sd, header_packet, sizeof(STCPHeader)) < sizeof(STCPHeader)) {
 			handshake_err_handling(sd);
 			return;
 		}
@@ -141,7 +141,7 @@ void transport_init(mysocket_t sd, bool_t is_active)
 	{
 		ctx->connection_state = CSTATE_LISTEN;
 
-		if (stcp_network_recv(sd, header_packet, sizeof(STCPHeader)) < sizeof(STCPHeader))
+		if ((size_t)stcp_network_recv(sd, header_packet, sizeof(STCPHeader)) < sizeof(STCPHeader))
 		{
 			handshake_err_handling(sd);
 			return;
@@ -164,7 +164,7 @@ void transport_init(mysocket_t sd, bool_t is_active)
 				return;
 			}
 
-			if (stcp_network_recv(sd, header_packet, sizeof(STCPHeader)) < sizeof(STCPHeader))
+			if ((size_t)stcp_network_recv(sd, header_packet, sizeof(STCPHeader)) < sizeof(STCPHeader))
 			{
 				handshake_err_handling(sd);
 				return;
