@@ -231,13 +231,14 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 			/* Make sure data is sent only if space is available */
 			if (ctx->sender_next_seq < ctx->sender_unack_seq + ctx->receiver_window_size)
 			{
-				char data[STCP_MSS - HEADER_SIZE] = { 0 };
-				size_t data_size = stcp_app_recv(sd, data, PACKET_SIZE - HEADER_SIZE);
+				char packet[STCP_MSS] = { 0 };
+				size_t packet_size = stcp_app_recv(sd, packet, STCP_MSS);
 
-				header->th_seq = ctx->sender_next_seq;
+				header->th_seq++;
 				header->th_win = WINDOW_SIZE;
 				
-				size_t sent = stcp_network_send(sd, header_packet, HEADER_SIZE, data, data_size, NULL) - HEADER SIZE;
+				// Currently sending a new header plus the entire packet
+				size_t sent = stcp_network_send(sd, header_packet, HEADER_SIZE, packet, packet_size, NULL) - HEADER SIZE;
 
 				ctx->sender_next_seq += sent;
 
@@ -292,6 +293,14 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 				else if(ctx->connection_state == CSTATE_LAST_ACK)
 				{
 					ctx->connection_state = CSTATE_CLOSED;
+<<<<<<< HEAD
+						
+				ctx->sender_next_seq = header_packet->th_ack;
+				ctx->receiver_next_seq = header_packet->th_seq + 1;
+				ctx->sender_unack_seq = ctx-> sender_next_seq;
+				
+				stcp_network_send(sd, header_packet, sizeof(STCPHeader));
+=======
 					ctx->done = true;
 				}
 					
@@ -307,7 +316,12 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 			
 		
 			
+>>>>>>> refs/remotes/origin/master
 			
+			} else {
+				// Handle Payload
+				
+			}			
 		}
 
 		else if (event & APP_CLOSE_REQUESTED)
