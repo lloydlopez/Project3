@@ -227,10 +227,6 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 
 
 	header = (STCPHeader *)calloc(1, sizeof(STCPHeader));
-	uint16_t *header_data_packet = (uint16_t *)calloc(1, STCP_MSS);
-	header_packet = (STCPHeader*)header_data_packet;
-	header_packet->th_off = 5;
-	char *data = (char*)(header_data_packet + TCP_DATA_START(header_data_packet));
 
 	while (!ctx->done)
 	{
@@ -266,6 +262,10 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 		else if (event & NETWORK_DATA)
 		{
 			cout << "NETWORK DATA YEAH" << endl;
+			uint16_t *header_data_packet = (uint16_t *)calloc(1, STCP_MSS);
+			header_packet = (STCPHeader*)header_data_packet;
+			header_packet->th_off = 5;
+			char *data = (char*)(header_data_packet + TCP_DATA_START(header_data_packet));
 			uint16_t packet_length = stcp_network_recv(sd, header_data_packet, STCP_MSS);
 
 			if(header_packet->th_flags == TH_FIN){				
@@ -330,7 +330,9 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 				header_packet->th_win = htons(ctx->receiver_window_size);
 
 				stcp_network_send(sd, header_packet, sizeof(STCPHeader), NULL);
-			}			
+			}		
+			free(header_packet);
+			free(header_data_packet);
 		}
 
 		else if (event & APP_CLOSE_REQUESTED)
@@ -357,8 +359,6 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 
 		cout << "FINISHED YEAH" << endl;
 		free(header);
-		free(header_packet);
-		free(header_data_packet);
 	}
 }
 
