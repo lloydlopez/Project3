@@ -257,6 +257,7 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 				header->th_win = WINDOW_SIZE;
 
 				// Currently sending a new header plus the entire packet
+				cout << "SENDING APP DATA OVER NETWORK" << endl;
 				stcp_network_send(sd, header, HEADER_SIZE, packet, packet_size, NULL);
 
 				clear_header(header);
@@ -272,8 +273,36 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 			char *data = (char*)(header_data_packet + TCP_DATA_START(header_data_packet));
 			uint16_t packet_length = stcp_network_recv(sd, header_data_packet, STCP_MSS);
 
-			if(header_packet->th_flags == TH_FIN){				
+			if(header_packet->th_flags == TH_ACK){
+				
+				cout << "ACK RECEIVED" << endl;
+				
+				if(ctx->connection_state == CSTATE_FIN_WAIT_1)
+				{
+					cout << "switching to FIN_WAIT_2" << endl;
+					ctx->connection_state = CSTATE_FIN_WAIT_2;					
+				}
+					
+				else if(ctx->connection_state == CSTATE_LAST_ACK)
+				{
+					cout << "switching to LAST_ACK" << endl;
+					ctx->connection_state = CSTATE_CLOSED;
+					ctx->done = true;
+				}
+				else if(ctx->connection_state != CSTATE_ESTABLISHED){
+					perror("NETWORK_DATA: ACK received in invalid state\n");
+				}
+					
+				ctx->sender_next_seq = ntohs(header_packet->th_ack);
+				ctx->receiver_next_seq = ntohs(header_packet->th_seq);
+				ctx->sender_unack_seq = ntohs(header_packet->th_ack);
+			
+			} 
+			stcp_app_send(sd, data + TCP_DATA_START(data), packet_length - TCP_DATA_START(data));
+			
+			if(header_packet->th_flags == TH_FIN || packet_length - TCP_DATA_START(data) > 0){				
 
+				cout << "FIN RECEIVED" << endl;
 				if (ctx->connection_state == CSTATE_ESTABLISHED)
 					ctx->connection_state = CSTATE_CLOSE_WAIT;
 
@@ -302,31 +331,17 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 				stcp_network_send(sd, header_packet, sizeof(STCPHeader), NULL);
 				stcp_fin_received(sd);
 
-			}else if(header_packet->th_flags == TH_ACK){
-				
-				if(ctx->connection_state == CSTATE_FIN_WAIT_1)
-					ctx->connection_state = CSTATE_FIN_WAIT_2;
-					
-				else if(ctx->connection_state == CSTATE_LAST_ACK)
-				{
-					ctx->connection_state = CSTATE_CLOSED;
-					ctx->done = true;
-				}
-				else if(ctx->connection_state != CSTATE_ESTABLISHED){
-					perror("NETWORK_DATA: ACK received in invalid state\n");
-				}
-					
-				ctx->sender_next_seq = ntohs(header_packet->th_ack);
-				ctx->receiver_next_seq = ntohs(header_packet->th_seq);
-				ctx->sender_unack_seq = ntohs(header_packet->th_ack);
+			}
 			
-			} else {
+			
+			
+			/*else {  // not sure what the purpose of this else branch is?
 				cout << "ELSE YEAH" << endl;
 				ctx->sender_next_seq = ntohs(header_packet->th_ack);
 				ctx->receiver_next_seq = ntohs(header_packet->th_seq) + 1;
 				ctx->sender_unack_seq = ntohs(header_packet->th_ack);
 				
-				stcp_app_send(sd, data, packet_length - sizeof(STCPHeader));
+				//stcp_app_send(sd, data, packet_length - sizeof(STCPHeader));
 				
 				header_packet->th_seq = htons(ctx->sender_next_seq);
 				header_packet->th_ack = htons(ctx->receiver_next_seq);
@@ -334,8 +349,8 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 				header_packet->th_win = htons(ctx->receiver_window_size);
 
 				stcp_network_send(sd, header_packet, sizeof(STCPHeader), NULL);
-			}		
-			//free(header_packet);
+			}	*/	
+
 			free(header_data_packet);
 		}
 
