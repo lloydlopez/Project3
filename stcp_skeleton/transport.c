@@ -307,7 +307,7 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 				ctx->sender_unack_seq = ntohs(header_packet->th_ack);
 				stcp_app_send(sd, data + TCP_DATA_START(data), packet_length - TCP_DATA_START(data));
 			
-				if(header_packet->th_flags == TH_FIN){ //|| packet_length - TCP_DATA_START(data) > 0){				
+				if(header_packet->th_flags == TH_FIN|| packet_length - TCP_DATA_START(data) > 0){				
 
 					cout << "FIN RECEIVED" << endl;
 					if (ctx->connection_state == CSTATE_ESTABLISHED)
