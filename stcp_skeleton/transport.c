@@ -226,10 +226,12 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 	STCPHeader *header, *header_packet;
 
 
-	header = (STCPHeader *)calloc(1, sizeof(STCPHeader));
+	
 
 	while (!ctx->done)
 	{
+		header = (STCPHeader *)calloc(1, sizeof(STCPHeader));
+		
 		cout << "IN WHILE LOOP----" << endl;
 		unsigned int event;
 
@@ -237,6 +239,8 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 		/* XXX: you will need to change some of these arguments! */
 		event = stcp_wait_for_event(sd, ANY_EVENT, NULL);
 
+		cout << "CHECK EVENT" << endl;
+		
 		/* check whether it was the network, app, or a close request */
 		if (event & APP_DATA)
 		{
@@ -331,7 +335,7 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 
 				stcp_network_send(sd, header_packet, sizeof(STCPHeader), NULL);
 			}		
-			free(header_packet);
+			//free(header_packet);
 			free(header_data_packet);
 		}
 
