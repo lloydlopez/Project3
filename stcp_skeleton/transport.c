@@ -105,7 +105,7 @@ void transport_init(mysocket_t sd, bool_t is_active)
 	if (is_active)
 	{
 		cout << "I'M ACTIVE----" << endl;
-		header_packet->th_seq = htons(ctx->sender_next_seq);
+		header_packet->th_seq = htonl(ctx->sender_next_seq);
 		header_packet->th_flags = TH_SYN;
 		header_packet->th_win = htons(ctx->receiver_window_size);
 
@@ -130,10 +130,10 @@ void transport_init(mysocket_t sd, bool_t is_active)
 		}
 
 		header_packet->th_flags = TH_ACK;
-		ctx->receiver_next_seq = ntohs(header_packet->th_seq) + 1;
-		ctx->sender_next_seq = ntohs(header_packet->th_ack);
-		header_packet->th_seq = htons(ctx->sender_next_seq);
-		header_packet->th_ack = htons(ctx->receiver_next_seq);
+		ctx->receiver_next_seq = ntohl(header_packet->th_seq) + 1;
+		ctx->sender_next_seq = ntohl(header_packet->th_ack);
+		header_packet->th_seq = htonl(ctx->sender_next_seq);
+		header_packet->th_ack = htonl(ctx->receiver_next_seq);
 
 		if (stcp_network_send(sd, header_packet, sizeof(STCPHeader), NULL) == -1)
 		{
@@ -154,15 +154,15 @@ void transport_init(mysocket_t sd, bool_t is_active)
 
 		ctx->connection_state = CSTATE_SYN_RECEIVED;
 
-		ctx->receiver_next_seq = ntohs(header_packet->th_seq) + 1;
+		ctx->receiver_next_seq = ntohl(header_packet->th_seq) + 1;
 		ctx->sender_window_size = MIN(ntohs(header_packet->th_win), WINDOW_SIZE);
 
 		/* Next step is to check that SYN flag is set in received header (header_packet) */
 		/* If so, set SYN and ACK flags and send message back to client */
 		if (header_packet->th_flags == TH_SYN) {
 			header_packet->th_flags = TH_SYN + TH_ACK;
-			header_packet->th_seq = htons(ctx->sender_next_seq);
-			header_packet->th_ack = htons(ctx->receiver_next_seq);
+			header_packet->th_seq = htonl(ctx->sender_next_seq);
+			header_packet->th_ack = htonl(ctx->receiver_next_seq);
 			if (stcp_network_send(sd, header_packet, sizeof(STCPHeader), NULL) == -1)
 			{
 				handshake_err_handling(sd);
@@ -294,17 +294,17 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 					perror("NETWORK_DATA: ACK received in invalid state\n");
 				}
 					
-				ctx->sender_next_seq = ntohs(header_packet->th_ack);
-				ctx->receiver_next_seq = ntohs(header_packet->th_seq);
-				ctx->sender_unack_seq = ntohs(header_packet->th_ack);
+				ctx->sender_next_seq = ntohl(header_packet->th_ack);
+				ctx->receiver_next_seq = ntohl(header_packet->th_seq);
+				ctx->sender_unack_seq = ntohl(header_packet->th_ack);
 			
 			}
 			else
 			{
 				//send data to app
-				ctx->sender_next_seq = ntohs(header_packet->th_ack);
-				ctx->receiver_next_seq = ntohs(header_packet->th_seq) + 1;
-				ctx->sender_unack_seq = ntohs(header_packet->th_ack);
+				ctx->sender_next_seq = ntohl(header_packet->th_ack);
+				ctx->receiver_next_seq = ntohl(header_packet->th_seq) + 1;
+				ctx->sender_unack_seq = ntohl(header_packet->th_ack);
 				stcp_app_send(sd, data + TCP_DATA_START(data), packet_length - TCP_DATA_START(data));
 			
 				if(header_packet->th_flags == TH_FIN|| packet_length - TCP_DATA_START(data) > 0){				
@@ -326,12 +326,12 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 						perror("NETWORK_DATA: FIN received in invalid state\n");
 					}
 					
-					ctx->sender_next_seq = ntohs(header_packet->th_ack);
-					ctx->receiver_next_seq = ntohs(header_packet->th_seq) + 1;
-					ctx->sender_unack_seq = ntohs(header_packet->th_ack);
+					ctx->sender_next_seq = ntohl(header_packet->th_ack);
+					ctx->receiver_next_seq = ntohl(header_packet->th_seq) + 1;
+					ctx->sender_unack_seq = ntohl(header_packet->th_ack);
 					
-					header_packet->th_seq = htons(ctx->sender_next_seq);
-					header_packet->th_ack = htons(ctx->receiver_next_seq);
+					header_packet->th_seq = htonl(ctx->sender_next_seq);
+					header_packet->th_ack = htonl(ctx->receiver_next_seq);
 					header_packet->th_flags = TH_ACK;
 					header_packet->th_win = htons(ctx->receiver_window_size);
 
@@ -342,8 +342,8 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 				else 
 				{  // send out ack
 					cout << "sending ack" << endl;
-					header_packet->th_seq = htons(ctx->sender_next_seq);
-					header_packet->th_ack = htons(ctx->receiver_next_seq);
+					header_packet->th_seq = htonl(ctx->sender_next_seq);
+					header_packet->th_ack = htonl(ctx->receiver_next_seq);
 					header_packet->th_flags = TH_ACK;
 					header_packet->th_win = htons(ctx->receiver_window_size);
 
@@ -369,8 +369,8 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 				perror("APP_CLOSE_REQUESTED: invalid state\n");
 			}
 
-			header_packet->th_seq = htons(ctx->sender_next_seq);
-			header_packet->th_ack = htons(ctx->receiver_next_seq);
+			header_packet->th_seq = htonl(ctx->sender_next_seq);
+			header_packet->th_ack = htonl(ctx->receiver_next_seq);
 			header_packet->th_flags = TH_FIN;
 			header_packet->th_win = htons(ctx->receiver_window_size);
 			cout << "PRE-FINAL SEND" << endl;
