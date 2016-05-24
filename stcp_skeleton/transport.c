@@ -301,6 +301,8 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 			}
 			else
 			{
+				cout << "ELSE YEAH" << endl;
+
 				//send data to app
 				ctx->sender_next_seq = ntohl(header_packet->th_ack);
 				ctx->receiver_next_seq = ntohl(header_packet->th_seq) + 1;
@@ -350,8 +352,6 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 					stcp_network_send(sd, header_packet, sizeof(STCPHeader), NULL);
 				}	
 			}
-
-			free(header_data_packet);
 		}
 
 		else if (event & APP_CLOSE_REQUESTED)
