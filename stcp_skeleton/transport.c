@@ -181,6 +181,7 @@ void transport_init(mysocket_t sd, bool_t is_active)
 	}
 
 	ctx->connection_state = CSTATE_ESTABLISHED;
+	
 	stcp_unblock_application(sd);
 
 	control_loop(sd, ctx);
@@ -379,6 +380,8 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 
 		free(header);
 	}
+	
+	cout<<"EXITING CONTROL LOOP\n";
 }
 
 void clear_header(tcphdr *header)
