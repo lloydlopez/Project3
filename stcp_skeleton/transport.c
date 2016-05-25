@@ -260,11 +260,11 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 		else if (event & NETWORK_DATA)
 		{
 			cout << "NETWORK DATA YEAH" << endl;
-			char *header_data_packet = (char *)calloc(1, STCP_MSS);
+			uint8_t *header_data_packet = (uint8_t *)calloc(1, STCP_MSS);
+			uint8_t *data = (uint8_t*)(header_data_packet + sizeof(STCPHeader));
+			uint16_t packet_length = stcp_network_recv(sd, header_data_packet, STCP_MSS);
 			header_packet = (STCPHeader*)header_data_packet;
 			header_packet->th_off = 5;
-			char *data = (char*)(header_data_packet + TCP_DATA_START(header_packet));
-			uint16_t packet_length = stcp_network_recv(sd, header_data_packet, STCP_MSS);
 
 			if(sizeof(header_data_packet) > 20)
 				cout << data << endl;
