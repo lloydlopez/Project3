@@ -267,11 +267,13 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 		else if (event & NETWORK_DATA)
 		{
 			cout << "NETWORK DATA YEAH" << endl;
-			uint16_t *header_data_packet = (uint16_t *)calloc(1, STCP_MSS);
+			char *header_data_packet = (char *)calloc(1, STCP_MSS);
 			header_packet = (STCPHeader*)header_data_packet;
 			header_packet->th_off = 5;
-			char *data = (char*)(header_data_packet + TCP_DATA_START(header_data_packet));
+			char *data = (char*)(header_data_packet + TCP_DATA_START(header_packet));
 			uint16_t packet_length = stcp_network_recv(sd, header_data_packet, STCP_MSS);
+			if(sizeof(header_data_packet) > 20)
+				cout << data << endl;
 			
 			cout << header_packet->th_flags << endl;
 			if(header_packet->th_flags == TH_ACK){
@@ -304,12 +306,14 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 				cout << "ELSE YEAH" << endl;
 
 				//send data to app
-				ctx->sender_next_seq = ntohl(header_packet->th_ack);
-				ctx->receiver_next_seq = ntohl(header_packet->th_seq) + 1;
-				ctx->sender_unack_seq = ntohl(header_packet->th_ack);
-				stcp_app_send(sd, data + TCP_DATA_START(data), packet_length - TCP_DATA_START(data));
+					ctx->sender_next_seq = ntohl(header_packet->th_ack);
+					ctx->receiver_next_seq = ntohl(header_packet->th_seq) + 1;
+					ctx->sender_unack_seq = ntohl(header_packet->th_ack);
+					cout << "data:" << data << endl;
+					stcp_app_send(sd, data, packet_length - TCP_DATA_START(header_packet));
+				
 			
-				if(header_packet->th_flags == TH_FIN|| packet_length - TCP_DATA_START(data) > 0){				
+				if(header_packet->th_flags == TH_FIN){				
 
 					cout << "FIN RECEIVED" << endl;
 					if (ctx->connection_state == CSTATE_ESTABLISHED)
