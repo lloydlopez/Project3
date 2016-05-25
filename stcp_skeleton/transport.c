@@ -104,7 +104,6 @@ void transport_init(mysocket_t sd, bool_t is_active)
 
 	if (is_active)
 	{
-		cout << "I'M ACTIVE----" << endl;
 		header_packet->th_seq = htonl(ctx->sender_next_seq);
 		header_packet->th_flags = TH_SYN;
 		header_packet->th_win = htons(ctx->receiver_window_size);
@@ -143,7 +142,6 @@ void transport_init(mysocket_t sd, bool_t is_active)
 	}
 	else /* Passive end of the connection */
 	{
-		cout << "I'M PASSIVE" << endl;
 		ctx->connection_state = CSTATE_LISTEN;
 
 		if ((size_t)stcp_network_recv(sd, header_packet, sizeof(STCPHeader)) < sizeof(STCPHeader))
@@ -187,7 +185,8 @@ void transport_init(mysocket_t sd, bool_t is_active)
 
 	control_loop(sd, ctx);
 
-	cout << "ABOUT TO GO INTO CONTROL----" << endl;
+	cout << "FINISHED CONTROL LOOP-----" << endl;
+
 	/* do any cleanup here */
 	free(ctx);
 	free(header_packet);
@@ -218,15 +217,11 @@ static void generate_initial_seq_num(context_t *ctx)
 */
 static void control_loop(mysocket_t sd, context_t *ctx)
 {
-	cout << "MY FIRST TIME" << endl;
+	cout << "CONTROL LOOP FIRST TIME-----" << endl;
 	assert(ctx);
 	assert(!ctx->done);
 
-	cout << "ASSERTTTT" << endl;
-	STCPHeader *header, *header_packet;
-
-
-	
+	STCPHeader *header, *header_packet;	
 
 	while (!ctx->done)
 	{
@@ -238,13 +233,11 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 		/* see stcp_api.h or stcp_api.c for details of this function */
 		/* XXX: you will need to change some of these arguments! */
 		event = stcp_wait_for_event(sd, ANY_EVENT, NULL);
-
-		cout << "CHECK EVENT YEAH" << endl;
 		
 		/* check whether it was the network, app, or a close request */
 		if (event & APP_DATA)
 		{
-			cout << "APP DATA YEAH" << endl;
+			cout << "APP DATA EVENT----" << endl;
 
 			/* Make sure data is sent only if space is available */
 			if (ctx->sender_next_seq < ctx->sender_unack_seq + ctx->receiver_window_size)
@@ -272,10 +265,11 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 			header_packet->th_off = 5;
 			char *data = (char*)(header_data_packet + TCP_DATA_START(header_packet));
 			uint16_t packet_length = stcp_network_recv(sd, header_data_packet, STCP_MSS);
+
 			if(sizeof(header_data_packet) > 20)
 				cout << data << endl;
 			
-			cout << header_packet->th_flags << endl;
+
 			if(header_packet->th_flags == TH_ACK){
 				
 				cout << "ACK RECEIVED" << endl;
@@ -299,11 +293,10 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 				ctx->sender_next_seq = ntohl(header_packet->th_ack);
 				ctx->receiver_next_seq = ntohl(header_packet->th_seq);
 				ctx->sender_unack_seq = ntohl(header_packet->th_ack);
-			
 			}
 			else
 			{
-				cout << "ELSE YEAH" << endl;
+				cout << "ELSE EVENT-----" << endl;
 
 				//send data to app
 					ctx->sender_next_seq = ntohl(header_packet->th_ack);
@@ -383,7 +376,6 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 			cout << "POST-FINAL SEND" << endl;
 		}
 
-		cout << "FINISHED YEAH" << endl;
 		free(header);
 	}
 }

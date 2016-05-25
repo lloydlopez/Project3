@@ -215,6 +215,8 @@ loop_until_end(int sd)
             errcnd = 1;
             break;
         }
+
+		cout << "FILE FROM SERVER: " << endl;
         /* Retrieve the remote file and write it to a local file */
         while (length)
         {
