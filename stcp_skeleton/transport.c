@@ -349,6 +349,8 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 					stcp_network_send(sd, header_packet, sizeof(STCPHeader), NULL);
 				}	
 			}
+
+			free(header_data_packet);
 		}
 
 		else if (event & APP_CLOSE_REQUESTED)

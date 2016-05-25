@@ -154,9 +154,12 @@ loop_until_end(int sd)
         }
         else
         {
-            strcpy(line, filename);
+        
+			strcpy(line, filename);
             pline = line + strlen(line) - 1;
         }
+
+		cout << "IN CLIENT FILE: " << endl;
         *++pline = '\r';
         *++pline = '\n';
         *++pline = '\0';
