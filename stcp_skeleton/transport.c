@@ -173,7 +173,6 @@ void transport_init(mysocket_t sd, bool_t is_active)
 			}
 		}
 		else {
-			printf("byte order issue");  //Remove before submitting
 			handshake_err_handling(sd);
 			return;
 		}
@@ -270,9 +269,6 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 					ctx->connection_state = CSTATE_CLOSED;
 					ctx->done = true;
 				}
-				else if(ctx->connection_state != CSTATE_ESTABLISHED){
-					perror("NETWORK_DATA: ACK received in invalid state\n");
-				}
 					
 				ctx->sender_next_seq = ntohl(header_packet->th_ack);
 				ctx->receiver_next_seq = ntohl(header_packet->th_seq);
@@ -298,10 +294,6 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 					{
 						ctx->connection_state = CSTATE_CLOSED;
 						ctx->done = true;
-					}
-					else
-					{
-						perror("NETWORK_DATA: FIN received in invalid state\n");
 					}
 					
 					ctx->sender_next_seq = ntohl(header_packet->th_ack);
@@ -337,11 +329,6 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 
 			else if (ctx->connection_state == CSTATE_CLOSE_WAIT)
 				ctx->connection_state = CSTATE_LAST_ACK;
-
-			else
-			{
-				perror("APP_CLOSE_REQUESTED: invalid state\n");
-			}
 
 			header_packet->th_seq = htonl(ctx->sender_next_seq);
 			header_packet->th_ack = htonl(ctx->receiver_next_seq);
