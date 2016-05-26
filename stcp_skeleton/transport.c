@@ -232,7 +232,8 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 
 	STCPHeader *header, *header_packet;	
 	uint8_t *window = (uint8_t*)calloc(1, ctx->sender_window_size);
-	uint8_t *window_ptr = window;
+	uint8_t *window_ptr = (uint8_t*)calloc(1, ctx->sender_window_size);
+	window_ptr = window;
 	size_t sent;
 
 	while (!ctx->done)
@@ -246,6 +247,8 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 		/* XXX: you will need to change some of these arguments! */
 		event = stcp_wait_for_event(sd, ANY_EVENT, NULL);
 		
+		cout << "EVENT----:" << event << endl;
+
 		/* check whether it was the network, app, or a close request */
 		if (event & APP_DATA)
 		{
@@ -272,6 +275,8 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 
 				// Currently sending a new header plus the entire packet
 				cout << "SENDING APP DATA OVER NETWORK" << endl;
+				cout << "WINDOW PTR----" << window_ptr << endl;
+				cout << "WINDOW----" << window << endl;
 				sent = stcp_network_send(sd, window, window_ptr - window, NULL);
 				ctx->sender_window_size += sent;
 				window_ptr -= sent;
