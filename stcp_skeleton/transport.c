@@ -388,8 +388,6 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 					stcp_fin_received(sd);
 				}	
 			}
-
-			free(header_data_packet);
 		}
 
 		else if (event & APP_CLOSE_REQUESTED)
