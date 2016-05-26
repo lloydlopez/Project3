@@ -11,6 +11,21 @@ The transport layer was designed by following the guidelines provided in RFC 793
 The 11 connection states are defined as enums to be used by Context struct.
  
 The flow control is handled by different loops. 
+
+Designing and implementation of the transport layer logic was the result of team work,
+with individual contributions as follows : 
+
+Dhruv Seth - Studying and designing the state machine logic and different 
+             connection states to further implement the layer, contributed to code debugging 
+
+James Baracca - Designed and implemented the connection setup and teardown, 
+                handled specific Event logic in control loop
+
+John Hager - Researched and implemented the necessary structs & their relative fields, 
+             also handled specific Event logic in control loop
+
+Lloyd Lopez - Studying and designing the control loop, handled event logic in control loop,
+              also dealt with code debugging. 
  
 transport_init() handles the initialization of the connection & three way handshaking, 
 and then jumps to the control loop.
@@ -20,6 +35,7 @@ continuously loops, waiting for incoming network data, outgoing data passed
 down from the app, or a close request from the app. It handles each of these
 in turn, using IF-ELSE statements the corresponding event type, and also responsible
 for making sure the appropriate ACKs are sent and received.
+ 
 
 A new function clear_header is used to set all the parameters of TCP Header to zero.
 
