@@ -1,7 +1,7 @@
 /*
 * transport.c
 *
-* COS461: Assignment 3 (STCP)
+* CPSC Networking: Project #3 (STCP)
 *
 * This file implements the STCP layer that sits between the
 * mysocket and network layers. You are required to fill in the STCP
@@ -78,7 +78,6 @@ void handshake_err_handling(mysocket_t sd)
 */
 void transport_init(mysocket_t sd, bool_t is_active)
 {
-	cout << "INITIALIZE----" << endl;
 	context_t *ctx;
 
 	ctx = (context_t *)calloc(1, sizeof(context_t));
@@ -186,8 +185,6 @@ void transport_init(mysocket_t sd, bool_t is_active)
 
 	control_loop(sd, ctx);
 
-	cout << "FINISHED CONTROL LOOP-----" << endl;
-
 	/* do any cleanup here */
 	free(ctx);
 	free(header_packet);
@@ -218,7 +215,6 @@ static void generate_initial_seq_num(context_t *ctx)
 */
 static void control_loop(mysocket_t sd, context_t *ctx)
 {
-	cout << "CONTROL LOOP FIRST TIME-----" << endl;
 	assert(ctx);
 	assert(!ctx->done);
 
@@ -228,7 +224,6 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 	{
 		header = (STCPHeader *)calloc(1, sizeof(STCPHeader));
 		
-		cout << "IN WHILE LOOP----" << endl;
 		unsigned int event;
 
 		/* see stcp_api.h or stcp_api.c for details of this function */
@@ -238,8 +233,6 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 		/* check whether it was the network, app, or a close request */
 		if (event & APP_DATA)
 		{
-			cout << "APP DATA EVENT----" << endl;
-
 			/* Make sure data is sent only if space is available */
 			if (ctx->sender_next_seq < ctx->sender_unack_seq + ctx->receiver_window_size)
 			{
@@ -251,7 +244,6 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 				header->th_win = WINDOW_SIZE;
 
 				// Currently sending a new header plus the entire packet
-				cout << "SENDING APP DATA OVER NETWORK" << endl;
 				stcp_network_send(sd, header, HEADER_SIZE, packet, packet_size, NULL);
 
 				clear_header(header);
@@ -260,30 +252,21 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 
 		else if (event & NETWORK_DATA)
 		{
-			cout << "NETWORK DATA YEAH" << endl;
 			uint8_t *header_data_packet = (uint8_t *)calloc(1, STCP_MSS);
 			uint8_t *data = (uint8_t*)(header_data_packet + sizeof(STCPHeader));
 			uint16_t packet_length = stcp_network_recv(sd, header_data_packet, STCP_MSS);
 			header_packet = (STCPHeader*)header_data_packet;
 			header_packet->th_off = 5;
 
-			if(sizeof(header_data_packet) > 20)
-				cout << data << endl;
-			
-
 			if(header_packet->th_flags == TH_ACK){
-				
-				cout << "ACK RECEIVED" << endl;
 				
 				if(ctx->connection_state == CSTATE_FIN_WAIT_1)
 				{
-					cout << "switching to FIN_WAIT_2" << endl;
 					ctx->connection_state = CSTATE_FIN_WAIT_2;					
 				}
 					
 				else if(ctx->connection_state == CSTATE_LAST_ACK)
 				{
-					cout << "switching to LAST_ACK" << endl;
 					ctx->connection_state = CSTATE_CLOSED;
 					ctx->done = true;
 				}
@@ -297,19 +280,14 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 			}
 			else
 			{
-				cout << "ELSE EVENT-----" << endl;
-
 				//send data to app
 					ctx->sender_next_seq = ntohl(header_packet->th_ack);
 					ctx->receiver_next_seq = ntohl(header_packet->th_seq) + 1;
 					ctx->sender_unack_seq = ntohl(header_packet->th_ack);
-					cout << "data:" << data << endl;
 					stcp_app_send(sd, data, packet_length - TCP_DATA_START(header_packet));
 				
 			
 				if(header_packet->th_flags == TH_FIN){				
-
-					cout << "FIN RECEIVED" << endl;
 					if (ctx->connection_state == CSTATE_ESTABLISHED)
 						ctx->connection_state = CSTATE_CLOSE_WAIT;
 
@@ -341,7 +319,6 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 				}
 				else 
 				{  // send out ack
-					cout << "sending ack" << endl;
 					header_packet->th_seq = htonl(ctx->sender_next_seq);
 					header_packet->th_ack = htonl(ctx->receiver_next_seq);
 					header_packet->th_flags = TH_ACK;
@@ -355,8 +332,6 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 
 		else if (event & APP_CLOSE_REQUESTED)
 		{
-			cout << "CLOSE REQUEST YEAH" << endl;
-			cout << ctx->connection_state << "bananas" << endl;
 			if (ctx->connection_state == CSTATE_ESTABLISHED)
 				ctx->connection_state = CSTATE_FIN_WAIT_1;
 
@@ -372,16 +347,11 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 			header_packet->th_ack = htonl(ctx->receiver_next_seq);
 			header_packet->th_flags = TH_FIN;
 			header_packet->th_win = htons(ctx->receiver_window_size);
-			cout << "PRE-FINAL SEND" << endl;
-
 			stcp_network_send(sd, header_packet, sizeof(STCPHeader), NULL);
-			cout << "POST-FINAL SEND" << endl;
 		}
 
 		free(header);
 	}
-	
-	cout<<"EXITING CONTROL LOOP\n";
 }
 
 void clear_header(tcphdr *header)
