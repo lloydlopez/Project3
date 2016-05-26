@@ -20,7 +20,6 @@
 #include "stcp_api.h"
 #include "transport.h"
 #include <iostream>
-#include <unistd.h>
 using namespace std;
 
 #define WINDOW_SIZE 3072
@@ -89,7 +88,7 @@ void transport_init(mysocket_t sd, bool_t is_active)
 
 	ctx->sender_next_seq = ctx->initial_sequence_num;
 	ctx->sender_unack_seq = ctx->initial_sequence_num;
-	ctx->sender_window_size = WINDOW_SIZE;
+	ctx->receiver_window_size = WINDOW_SIZE;
 
 	/* XXX: you should send a SYN packet here if is_active, or wait for one
 	* to arrive if !is_active.  after the handshake completes, unblock the
@@ -100,14 +99,14 @@ void transport_init(mysocket_t sd, bool_t is_active)
 	*/
 
 	STCPHeader *header_packet; /* See STCPHeader in transport.h */
-	header_packet = (STCPHeader *)calloc(1, HEADER_SIZE);
+	header_packet = (STCPHeader *)calloc(1, sizeof(STCPHeader));
 	assert(header_packet);
 
 	if (is_active)
 	{
 		header_packet->th_seq = htonl(ctx->sender_next_seq);
 		header_packet->th_flags = TH_SYN;
-		header_packet->th_win = htons(ctx->sender_window_size);
+		header_packet->th_win = htons(ctx->receiver_window_size);
 
 		if (stcp_network_send(sd, header_packet, sizeof(STCPHeader), NULL) == -1)
 		{
@@ -132,12 +131,8 @@ void transport_init(mysocket_t sd, bool_t is_active)
 		header_packet->th_flags = TH_ACK;
 		ctx->receiver_next_seq = ntohl(header_packet->th_seq) + 1;
 		ctx->sender_next_seq = ntohl(header_packet->th_ack);
-		ctx->receiver_window_size = ntohs(header_packet->th_win);
-		ctx->sender_window_size = MIN(ntohs(header_packet->th_win), ctx->receiver_window_size);
-		
 		header_packet->th_seq = htonl(ctx->sender_next_seq);
 		header_packet->th_ack = htonl(ctx->receiver_next_seq);
-		header_packet->th_win = htons(MIN(ctx->receiver_window_size, ctx->sender_window_size));
 
 		if (stcp_network_send(sd, header_packet, sizeof(STCPHeader), NULL) == -1)
 		{
@@ -159,12 +154,10 @@ void transport_init(mysocket_t sd, bool_t is_active)
 
 		ctx->receiver_next_seq = ntohl(header_packet->th_seq) + 1;
 		ctx->sender_window_size = MIN(ntohs(header_packet->th_win), WINDOW_SIZE);
-		ctx->receiver_window_size = WINDOW_SIZE;
 
 		/* Next step is to check that SYN flag is set in received header (header_packet) */
 		/* If so, set SYN and ACK flags and send message back to client */
 		if (header_packet->th_flags == TH_SYN) {
-			header_packet->th_win = htons(MIN(ctx->receiver_window_size, ctx->sender_window_size));
 			header_packet->th_flags = TH_SYN + TH_ACK;
 			header_packet->th_seq = htonl(ctx->sender_next_seq);
 			header_packet->th_ack = htonl(ctx->receiver_next_seq);
@@ -228,27 +221,20 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 	cout << "CONTROL LOOP FIRST TIME-----" << endl;
 	assert(ctx);
 	assert(!ctx->done);
-	
 
 	STCPHeader *header, *header_packet;	
-	uint8_t *window = (uint8_t*)calloc(1, ctx->sender_window_size);
-	uint8_t *window_ptr = (uint8_t*)calloc(1, ctx->sender_window_size);
-	window_ptr = window;
-	size_t sent;
 
 	while (!ctx->done)
 	{
-		header = (STCPHeader *)calloc(1, HEADER_SIZE);
+		header = (STCPHeader *)calloc(1, sizeof(STCPHeader));
 		
 		cout << "IN WHILE LOOP----" << endl;
 		unsigned int event;
-		
+
 		/* see stcp_api.h or stcp_api.c for details of this function */
 		/* XXX: you will need to change some of these arguments! */
 		event = stcp_wait_for_event(sd, ANY_EVENT, NULL);
 		
-		cout << "EVENT----:" << event << endl;
-
 		/* check whether it was the network, app, or a close request */
 		if (event & APP_DATA)
 		{
@@ -258,29 +244,15 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 			if (ctx->sender_next_seq < ctx->sender_unack_seq + ctx->receiver_window_size)
 			{
 				char packet[STCP_MSS] = { 0 };
-					
 				size_t packet_size = stcp_app_recv(sd, packet, STCP_MSS);
-				
-				ctx->sender_next_seq += packet_size;
-				cout << "next1:" << ctx->sender_next_seq << endl;
-				header->th_seq = htonl(ctx->sender_next_seq);
-				header->th_ack = htonl(ctx->receiver_next_seq + 1);
-				
-				memcpy(window_ptr, header, HEADER_SIZE);
-				window_ptr += HEADER_SIZE;
-				memcpy(window_ptr, packet, packet_size);
-				window_ptr += packet_size;
-				ctx->sender_window_size -= (window_ptr - window);
-				header->th_win = htons(ctx->sender_window_size);
+
+				ctx->sender_next_seq++;
+				header->th_seq = ctx->sender_next_seq;
+				header->th_win = WINDOW_SIZE;
 
 				// Currently sending a new header plus the entire packet
 				cout << "SENDING APP DATA OVER NETWORK" << endl;
-				cout << "WINDOW PTR----" << window_ptr << endl;
-				cout << "WINDOW----" << window << endl;
-				sent = stcp_network_send(sd, window, window_ptr - window, NULL);
-				ctx->sender_window_size += sent;
-				window_ptr -= sent;
-				
+				stcp_network_send(sd, header, HEADER_SIZE, packet, packet_size, NULL);
 
 				clear_header(header);
 			}
@@ -290,23 +262,10 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 		{
 			cout << "NETWORK DATA YEAH" << endl;
 			uint8_t *header_data_packet = (uint8_t *)calloc(1, STCP_MSS);
-			uint8_t *data = (uint8_t*)(window_ptr + sizeof(STCPHeader));
+			uint8_t *data = (uint8_t*)(header_data_packet + sizeof(STCPHeader));
 			uint16_t packet_length = stcp_network_recv(sd, header_data_packet, STCP_MSS);
-			
-			memcpy(window_ptr, header_data_packet, packet_length);
-			window_ptr += packet_length;
-			header_packet = (STCPHeader*)(window_ptr - packet_length);
+			header_packet = (STCPHeader*)header_data_packet;
 			header_packet->th_off = 5;
-			
-			ctx->receiver_next_seq = ntohl(header_packet->th_seq) + 1;
-			ctx->sender_next_seq = ctx->sender_next_seq + (packet_length-HEADER_SIZE);
-			ctx->sender_unack_seq = ntohl(header_packet->th_seq) + 1;
-			
-			ctx->sender_window_size -= packet_length;
-			ctx->receiver_window_size = ntohs(header_packet->th_win) + packet_length;
-			ctx->sender_window_size = MIN(ctx->sender_window_size, ctx->receiver_window_size);
-			
-			
 
 			if(sizeof(header_data_packet) > 20)
 				cout << data << endl;
@@ -332,16 +291,20 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 					perror("NETWORK_DATA: ACK received in invalid state\n");
 				}
 					
+				ctx->sender_next_seq = ntohl(header_packet->th_ack);
+				ctx->receiver_next_seq = ntohl(header_packet->th_seq);
+				ctx->sender_unack_seq = ntohl(header_packet->th_ack);
 			}
 			else
 			{
 				cout << "ELSE EVENT-----" << endl;
 
 				//send data to app
-				cout << "data:" << data << endl;
-				stcp_app_send(sd, data, packet_length - HEADER_SIZE);
-				window_ptr -= (packet_length - HEADER_SIZE);
-				ctx->sender_window_size += (packet_length - HEADER_SIZE);
+					ctx->sender_next_seq = ntohl(header_packet->th_ack);
+					ctx->receiver_next_seq = ntohl(header_packet->th_seq) + 1;
+					ctx->sender_unack_seq = ntohl(header_packet->th_ack);
+					cout << "data:" << data << endl;
+					stcp_app_send(sd, data, packet_length - TCP_DATA_START(header_packet));
 				
 			
 				if(header_packet->th_flags == TH_FIN){				
@@ -363,15 +326,16 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 						perror("NETWORK_DATA: FIN received in invalid state\n");
 					}
 					
+					ctx->sender_next_seq = ntohl(header_packet->th_ack);
+					ctx->receiver_next_seq = ntohl(header_packet->th_seq) + 1;
+					ctx->sender_unack_seq = ntohl(header_packet->th_ack);
 					
 					header_packet->th_seq = htonl(ctx->sender_next_seq);
 					header_packet->th_ack = htonl(ctx->receiver_next_seq);
 					header_packet->th_flags = TH_ACK;
-					header_packet->th_win = ctx->sender_window_size;
+					header_packet->th_win = htons(ctx->receiver_window_size);
 
-					sent = stcp_network_send(sd, header_packet, HEADER_SIZE, NULL);
-					window_ptr -= sent;
-					ctx->sender_window_size += sent;
+					stcp_network_send(sd, header_packet, sizeof(STCPHeader), NULL);
 					stcp_fin_received(sd);
 
 				}
@@ -381,13 +345,12 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 					header_packet->th_seq = htonl(ctx->sender_next_seq);
 					header_packet->th_ack = htonl(ctx->receiver_next_seq);
 					header_packet->th_flags = TH_ACK;
-					header_packet->th_win = ctx->sender_window_size;
+					header_packet->th_win = htons(ctx->receiver_window_size);
 
-					sent = stcp_network_send(sd, header_packet, HEADER_SIZE, NULL);
-					ctx->sender_window_size += sent;
-					stcp_fin_received(sd);
+					stcp_network_send(sd, header_packet, sizeof(STCPHeader), NULL);
 				}	
 			}
+			free(header_data_packet);
 		}
 
 		else if (event & APP_CLOSE_REQUESTED)
@@ -411,7 +374,7 @@ static void control_loop(mysocket_t sd, context_t *ctx)
 			header_packet->th_win = htons(ctx->receiver_window_size);
 			cout << "PRE-FINAL SEND" << endl;
 
-			stcp_network_send(sd, header_packet, HEADER_SIZE, NULL);
+			stcp_network_send(sd, header_packet, sizeof(STCPHeader), NULL);
 			cout << "POST-FINAL SEND" << endl;
 		}
 
